@@ -362,6 +362,63 @@ def download_result(job_id: str):
     )
 
 
+@app.get("/template")
+def download_template():
+    import io
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from fastapi.responses import StreamingResponse
+
+    headers = [
+        "key_name", "English",
+        "bg-BG", "bs-BA", "cs-CZ", "da-DK",
+        "de-AT", "de-CH", "de-DE", "de-LU",
+        "el-GR", "en-GB", "en-IE",
+        "es-ES", "es-IC", "et-EE", "fi-FI",
+        "fr-BE", "fr-CH", "fr-FR", "fr-LU",
+        "hr-HR", "hu-HU", "is-IS",
+        "it-CH", "it-IT", "lt-LT", "lv-LV",
+        "mk-MK", "nl-BE", "nl-NL", "nn-NO",
+        "pl-PL", "pt-PT", "ro-RO",
+        "sk-SK", "sl-SI", "sr-RS", "sv-SE", "uk-UA",
+    ]
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Translations"
+
+    dark_fill  = PatternFill(start_color="0E3A2F", end_color="0E3A2F", fill_type="solid")
+    key_fill   = PatternFill(start_color="1a5c47", end_color="1a5c47", fill_type="solid")
+    green_font = Font(color="78FAAE", bold=True, name="Calibri", size=11)
+    white_font = Font(color="FFFFFF", bold=True, name="Calibri", size=11)
+    center     = Alignment(horizontal="center", vertical="center")
+
+    for col_idx, h in enumerate(headers, 1):
+        cell = ws.cell(1, col_idx, h)
+        cell.font      = green_font
+        cell.alignment = center
+        cell.fill      = dark_fill
+        if h == "key_name":
+            cell.fill = key_fill
+            cell.font = white_font
+
+    ws.column_dimensions["A"].width = 36
+    ws.column_dimensions["B"].width = 48
+    for i in range(3, len(headers) + 1):
+        col_letter = openpyxl.utils.get_column_letter(i)
+        ws.column_dimensions[col_letter].width = 14
+    ws.row_dimensions[1].height = 24
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=skoda_x_translation_template.xlsx"},
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
     html_path = Path("templates/index.html")

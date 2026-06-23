@@ -675,6 +675,39 @@
       text-align: center;
       letter-spacing: .06em;
     }
+
+    /* Template download link */
+    .template-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .btn-template {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--w-30);
+      background: none;
+      border: 1px solid var(--w-8);
+      border-radius: 20px;
+      padding: 4px 12px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: color .15s, border-color .15s;
+    }
+
+    .btn-template:hover {
+      color: var(--eg);
+      border-color: var(--eg-20);
+    }
+
+    .btn-template svg { width: 11px; height: 11px; }
   </style>
 </head>
 <body>
@@ -799,7 +832,15 @@
 
     <!-- Right -->
     <div class="right">
-      <p class="form-lbl" data-i18n="form-lbl">Nahrát soubor</p>
+      <div class="template-row">
+        <p class="form-lbl" data-i18n="form-lbl">Nahrát soubor</p>
+        <a class="btn-template" href="/template" download>
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+          </svg>
+          <span data-i18n="btn-template">Stáhnout šablonu</span>
+        </a>
+      </div>
 
       <div class="drop-zone" id="drop-zone">
         <input type="file" id="file-input" accept=".xlsx" />
@@ -883,7 +924,8 @@
       'btn-go':      'Spustit překlad',
       'prog-lbl':    'Průběh',
       'btn-dl':      'Stáhnout výsledek',
-      'done-note':   'Překlad dokončen — soubor je připraven ke stažení',
+      'done-note':    'Překlad dokončen — soubor je připraven ke stažení',
+      'btn-template': 'Stáhnout šablonu',
     },
     en: {
       'eyebrow':     'Localisation',
@@ -901,7 +943,8 @@
       'btn-go':      'Start translation',
       'prog-lbl':    'Progress',
       'btn-dl':      'Download result',
-      'done-note':   'Translation complete — your file is ready to download',
+      'done-note':    'Translation complete — your file is ready to download',
+      'btn-template': 'Download template',
     },
   };
 
