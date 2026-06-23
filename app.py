@@ -401,12 +401,23 @@ def download_template():
             cell.fill = key_fill
             cell.font = white_font
 
-    ws.column_dimensions["A"].width = 36
+    ws.column_dimensions["A"].width = 42
     ws.column_dimensions["B"].width = 48
     for i in range(3, len(headers) + 1):
         col_letter = openpyxl.utils.get_column_letter(i)
         ws.column_dimensions[col_letter].width = 14
     ws.row_dimensions[1].height = 24
+
+    # Example row with naming convention
+    gray_fill   = PatternFill(start_color="F0F4F2", end_color="F0F4F2", fill_type="solid")
+    italic_font = Font(color="888888", italic=True, name="Calibri", size=10)
+    example_key = "YYMM_Product_CampaignName_AuthorInitials_XX_Title"
+    example_en  = "Your source English text goes here"
+    ws.cell(2, 1, example_key).font  = italic_font
+    ws.cell(2, 2, example_en).font   = italic_font
+    for col_idx in range(1, len(headers) + 1):
+        ws.cell(2, col_idx).fill = gray_fill
+    ws.row_dimensions[2].height = 18
 
     buf = io.BytesIO()
     wb.save(buf)
