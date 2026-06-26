@@ -14,6 +14,7 @@ import openpyxl
 import requests
 from openai import OpenAI
 import httpx
+from google import genai as google_genai
 
 from glossary import get_glossary
 
@@ -36,6 +37,11 @@ client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
     http_client=httpx.Client(proxy=None),
 )
+
+# Gemini klient (fallback za OpenAI)
+_gemini_key = os.getenv("GEMINI_API_KEY")
+gemini_client = google_genai.Client(api_key=_gemini_key) if _gemini_key else None
+GEMINI_MODEL = "gemini-2.0-flash"
 
 # ── Translation tables ────────────────────────────────────────────────────────
 
@@ -177,6 +183,78 @@ def call_openai(msg: str, trg_lang: str, lang_code: str = "") -> str:
     return resp.choices[0].message.content
 
 
+# ── Gemini fallback helpers ───────────────────────────────────────────────────
+
+def _gemini_ask(prompt_system: str, prompt_user: str) -> str:
+    if not gemini_client:
+        raise RuntimeError("GEMINI_API_KEY není nastaven")
+    response = gemini_client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=f"{prompt_system}\n\n{prompt_user}",
+    )
+    return response.text.strip()
+
+
+def call_gemini(msg: str, trg_lang: str, lang_code: str = "") -> str:
+    if msg.startswith("https://") or "@" in msg:
+        return msg
+    glossary = get_glossary(lang_code) if lang_code else ""
+    glossary_section = (
+        "\n\nAlso apply this mandatory Škoda X terminology:\n" + glossary if glossary else ""
+    )
+    system = (
+        f"Translate the given text from English to {trg_lang}. "
+        f"Return only the translated text, nothing else.{glossary_section}"
+    )
+    return _gemini_ask(system, msg)
+
+
+def call_gemini_skoda(msg: str, lang_code: str) -> str:
+    if msg.startswith("https://") or "@" in msg:
+        return msg
+    glossary = get_glossary(lang_code)
+    if not glossary:
+        return msg
+    system = (
+        "You are a translation corrector for Škoda X. "
+        "ONLY correct terminology according to the mandatory Škoda X terminology below. "
+        "Do not change grammar or style. Return only the corrected text.\n\n" + glossary
+    )
+    return _gemini_ask(system, msg)
+
+
+def call_gemini_dutch_informal(msg: str) -> str:
+    if msg.startswith("https://") or "@" in msg:
+        return msg
+    system = (
+        "Change dutch text from polite Tone Of Voice (U/Uw) to informal TOV (je/jij/jouw). "
+        "Don't change style, don't add numbers. Return only the changed text."
+    )
+    return _gemini_ask(system, msg)
+
+
+def call_ai(msg: str, trg_lang: str, lang_code: str = "") -> str:
+    """Gemini jako první, OpenAI jako záloha."""
+    try:
+        return call_gemini(msg, trg_lang, lang_code)
+    except Exception:
+        return call_openai(msg, trg_lang, lang_code)
+
+
+def call_ai_skoda(msg: str, lang_code: str) -> str:
+    try:
+        return call_gemini_skoda(msg, lang_code)
+    except Exception:
+        return call_openai_skoda(msg, lang_code)
+
+
+def call_ai_dutch_informal(msg: str) -> str:
+    try:
+        return call_gemini_dutch_informal(msg)
+    except Exception:
+        return call_openai_dutch_informal(msg)
+
+
 # ── Core translation job ──────────────────────────────────────────────────────
 
 def run_translation(job_id: str, input_path: Path, output_path: Path):
@@ -256,37 +334,37 @@ def run_translation(job_id: str, input_path: Path, output_path: Path):
 
             if mode in (TRANSLATION_MODE_DEEPL, TRANSLATION_MODE_OPENAI_SKODA):
                 if deepl_quota_exceeded:
-                    # DeepL quota already hit – přeložit přes OpenAI
-                    set_progress(job_id, f"[{lang_idx}/{total_langs}] {lang} – OpenAI (DeepL quota)…", percent_start)
-                    translated = [call_openai(msg, fallback_lang_name, lang_code) for msg in source_msgs.values()]
+                    # DeepL quota already hit – přeložit přes Gemini/OpenAI
+                    set_progress(job_id, f"[{lang_idx}/{total_langs}] {lang} – AI překlad (DeepL quota)…", percent_start)
+                    translated = [call_ai(msg, fallback_lang_name, lang_code) for msg in source_msgs.values()]
                     # Neformální tón pro nl-nl i v fallbacku
                     if lang_lower in chatgpt_informal_languages:
                         set_progress(job_id, f"[{lang_idx}/{total_langs}] {lang} – neformální tón…", percent_start + 1)
-                        translated = [call_openai_dutch_informal(t) for t in translated]
+                        translated = [call_ai_dutch_informal(t) for t in translated]
                 else:
                     try:
                         translated = call_deepl(list(source_msgs.values()), target_lang)
                     except DeepLQuotaExceeded as e:
                         deepl_quota_exceeded = True
-                        set_progress(job_id, f"⚠ {e} – přepínám na OpenAI pro zbytek překladu", percent_start)
-                        translated = [call_openai(msg, fallback_lang_name, lang_code) for msg in source_msgs.values()]
+                        set_progress(job_id, f"⚠ {e} – přepínám na Gemini/OpenAI pro zbytek překladu", percent_start)
+                        translated = [call_ai(msg, fallback_lang_name, lang_code) for msg in source_msgs.values()]
                         if lang_lower in chatgpt_informal_languages:
                             set_progress(job_id, f"[{lang_idx}/{total_langs}] {lang} – neformální tón…", percent_start + 1)
-                            translated = [call_openai_dutch_informal(t) for t in translated]
+                            translated = [call_ai_dutch_informal(t) for t in translated]
 
                     if not deepl_quota_exceeded:
                         if lang_lower in chatgpt_informal_languages:
                             set_progress(job_id, f"[{lang_idx}/{total_langs}] {lang} – neformální tón…", percent_start + 1)
-                            translated = [call_openai_dutch_informal(t) for t in translated]
+                            translated = [call_ai_dutch_informal(t) for t in translated]
 
                         if mode == TRANSLATION_MODE_OPENAI_SKODA:
                             set_progress(job_id, f"[{lang_idx}/{total_langs}] {lang} – Škoda terminologie…", percent_start + 2)
-                            translated = [call_openai_skoda(t, lang_code) for t in translated]
+                            translated = [call_ai_skoda(t, lang_code) for t in translated]
 
             elif mode == TRANSLATION_MODE_OPENAI:
                 translated = []
                 for source_msg in source_msgs.values():
-                    translated.append(call_openai(source_msg, target_lang, lang_code))
+                    translated.append(call_ai(source_msg, target_lang, lang_code))
 
             translation_cache[cache_key] = {}
             r_nr = 2
